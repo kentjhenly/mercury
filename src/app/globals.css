@@ -1,0 +1,263 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   MERCURY — app theme, tuned to match the "Mercury Landing" Design Component.
+   Deep cool-black canvas (#06070a) · brushed-graphite surfaces · mercury-silver
+   actions · one restrained ice-blue signal · muted instrument status colors.
+   Space Grotesk (display) + JetBrains Mono (data). Light-on-dark only.
+   ============================================================================ */
+
+:root {
+  /* --- deep-space canvas (matches landing #06070a) --- */
+  --bg-deep: #06070a;
+  --bg: #0a0c10;
+
+  /* --- brushed-graphite surfaces (landing panel gradient, flattened) --- */
+  --surface: #14171d;
+  --surface-2: #1a1e25;
+  --surface-3: #232831;
+
+  /* --- hairline panel seams (cool light at low opacity) --- */
+  --border: rgba(207, 212, 219, 0.16);
+  --border-soft: rgba(207, 212, 219, 0.1);
+  --border-strong: rgba(207, 212, 219, 0.32);
+
+  /* --- text ramp (matches landing) --- */
+  --text: #eef1f5;
+  --text-2: #d7dbe1;
+  --muted: #8b929c;
+  --dim: #565c66;
+
+  /* --- mercury-silver primary accent (landing button gradient) --- */
+  --mercury: #cfd4db;
+  --mercury-hi: #f3f5f8;
+  --mercury-lo: #bcc2cb;
+  --on-mercury: #0a0c10;
+
+  /* --- single signal color: restrained ice-blue (instrument indicator) --- */
+  --signal: #9fdcff;
+  --signal-dim: rgba(159, 220, 255, 0.14);
+
+  /* --- muted instrument status colors --- */
+  --positive: #86c9a4; /* advanced / hired */
+  --waiting: #d6c08a; /* owed a response */
+  --negative: #d68a8a; /* declined */
+  --positive-dim: rgba(134, 201, 164, 0.13);
+  --waiting-dim: rgba(214, 192, 138, 0.13);
+  --negative-dim: rgba(214, 138, 138, 0.13);
+
+  /* --- machined surface gradient + cool depth shadows --- */
+  --metal: linear-gradient(180deg, rgba(25, 28, 34, 0.9) 0%, rgba(14, 16, 20, 0.92) 100%);
+  --metal-mercury: linear-gradient(180deg, var(--mercury-hi) 0%, var(--mercury-lo) 100%);
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 10px 30px rgba(0, 0, 0, 0.45);
+  --shadow-pop: 0 22px 60px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(255, 255, 255, 0.06) inset;
+
+  --r: 5px;
+  --r-lg: 7px;
+}
+
+@theme {
+  --color-bg: var(--bg);
+  --color-bg-deep: var(--bg-deep);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-border-strong: var(--border-strong);
+
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-muted: var(--muted);
+  --color-dim: var(--dim);
+
+  --color-mercury: var(--mercury);
+  --color-signal: var(--signal);
+  --color-positive: var(--positive);
+  --color-waiting: var(--waiting);
+  --color-negative: var(--negative);
+
+  --font-sans: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SFMono-Regular", monospace;
+
+  --radius-DEFAULT: var(--r);
+  --radius-lg: var(--r-lg);
+}
+
+* {
+  border-color: var(--border-soft);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg-deep);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Numbers align in columns (counts, years, dates), instrument-style. */
+.tnum,
+[data-tnum] {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+}
+
+/* Mono "instrument label" helper — wide tracking, uppercase, like the landing. */
+.label {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  color: var(--dim);
+}
+
+/* ── Material language ────────────────────────────────────────────────────── */
+
+.panel {
+  background: var(--metal);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-panel);
+}
+
+.hairline {
+  border: 1px solid var(--border-soft);
+}
+
+/* Mercury-silver primary action with the landing's specular sheen on hover. */
+.mercury-btn {
+  background: var(--metal-mercury);
+  color: var(--on-mercury);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--mercury-lo);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.6) inset,
+    0 10px 30px rgba(0, 0, 0, 0.45);
+  position: relative;
+  overflow: hidden;
+  transition:
+    filter 180ms ease-out,
+    transform 180ms ease-out;
+}
+.mercury-btn:hover {
+  filter: brightness(1.04);
+}
+.mercury-btn:active {
+  transform: translateY(0.5px);
+}
+.mercury-btn::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 34%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.85), transparent);
+  transform: translateX(-180%) skewX(-18deg);
+  transition: transform 650ms ease-out;
+  pointer-events: none;
+}
+.mercury-btn:hover::after {
+  transform: translateX(320%) skewX(-18deg);
+}
+
+/* Instrument status pill tones. */
+.tone-neutral {
+  color: var(--text-2);
+  background: var(--surface-3);
+}
+.tone-active {
+  color: var(--signal);
+  background: var(--signal-dim);
+}
+.tone-positive {
+  color: var(--positive);
+  background: var(--positive-dim);
+}
+.tone-waiting {
+  color: var(--waiting);
+  background: var(--waiting-dim);
+}
+.tone-negative {
+  color: var(--negative);
+  background: var(--negative-dim);
+}
+
+:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+/* Instrument indicator: a single blinking signal dot (the "live" cue from the
+   Mercury Workspace top bar). Used sparingly — restraint by design. */
+.signal-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 10px var(--signal);
+  animation: mercury-blink 2.6s ease-in-out infinite;
+}
+
+/* Machined avatar tile — mercury-silver gradient, dark initials. */
+.avatar-tile {
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-lg);
+  color: var(--on-mercury);
+  background: var(--metal-mercury);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+}
+
+/* ── Motion: calm, weighted, opt-out aware ────────────────────────────────── */
+@keyframes mercury-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rise {
+  animation: mercury-rise 320ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes mercury-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .mercury-btn::after {
+    display: none;
+  }
+}
+
+.scroll-slim::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-slim::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 8px;
+}
+.scroll-slim::-webkit-scrollbar-track {
+  background: transparent;
+}
