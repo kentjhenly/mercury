@@ -17,9 +17,15 @@ try {
 
 // Content-Security-Policy. Next.js App Router injects inline bootstrap scripts
 // and the app uses inline styles in places, so 'unsafe-inline' is required for
-// script/style; 'unsafe-eval' is needed for the dev/Turbopack runtime. The
-// hardening that matters most here is locking down object-src, base-uri,
-// frame-ancestors and form-action, plus constraining connect/img sources.
+// script/style. 'unsafe-eval' is only needed by the dev/Turbopack runtime, so we
+// keep it out of the production policy. The hardening that matters most here is
+// locking down object-src, base-uri, frame-ancestors and form-action, plus
+// constraining connect/img sources.
+const isProd = process.env.NODE_ENV === "production";
+const scriptSrc = isProd
+  ? "script-src 'self' 'unsafe-inline' https://*.posthog.com"
+  : "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.posthog.com";
+
 const csp = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -27,7 +33,7 @@ const csp = [
   "frame-ancestors 'none'",
   "form-action 'self'",
   "frame-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.posthog.com",
+  scriptSrc,
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
   "img-src 'self' data: blob:" + (supabaseOrigin ? ` ${supabaseOrigin}` : ""),

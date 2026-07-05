@@ -1,6 +1,11 @@
 import type { MercuryStage } from "@/lib/supabase/types";
 
-export type ResponseType = "invite-to-interview" | "request-info" | "polite-decline" | "custom";
+export type ResponseType =
+  | "invite-to-interview"
+  | "request-info"
+  | "keep-warm"
+  | "polite-decline"
+  | "custom";
 
 export interface TemplateContext {
   applicantName: string | null;
@@ -15,9 +20,11 @@ export interface RenderedTemplate {
   advanceTo?: MercuryStage;
 }
 
-const TEMPLATE_META: Record<Exclude<ResponseType, "custom">, { label: string; advanceTo: MercuryStage }> = {
+const TEMPLATE_META: Record<Exclude<ResponseType, "custom">, { label: string; advanceTo?: MercuryStage }> = {
   "invite-to-interview": { label: "Invite to interview", advanceTo: "interviewing" },
   "request-info": { label: "Request more info", advanceTo: "contacted" },
+  // "Keep warm" is a reassurance note — it never moves the applicant on its own.
+  "keep-warm": { label: "Keep warm" },
   "polite-decline": { label: "Polite decline", advanceTo: "declined" },
 };
 
@@ -29,7 +36,7 @@ export function responseLabel(type: ResponseType): string {
 
 /** The stage a response type implies advancing to, or null (custom). */
 export function advanceStageForType(type: ResponseType): MercuryStage | null {
-  return type === "custom" ? null : TEMPLATE_META[type].advanceTo;
+  return type === "custom" ? null : TEMPLATE_META[type].advanceTo ?? null;
 }
 
 /**
@@ -62,6 +69,15 @@ export function renderTemplate(type: ResponseType, ctx: TemplateContext): Render
           `Looking forward to hearing from you.\n\n` +
           `Best regards,\n${from}`,
       };
+    case "keep-warm":
+      return {
+        subject: `Your application for ${role}`,
+        body:
+          `Hi ${name},\n\n` +
+          `Just a quick note to let you know your application for the ${role} role is still under consideration. We haven't made a decision yet, and didn't want to leave you waiting without an update.\n\n` +
+          `We'll be in touch as soon as we have news.\n\n` +
+          `Best regards,\n${from}`,
+      };
     case "polite-decline":
       return {
         subject: `Update on your application for ${role}`,
@@ -79,4 +95,46 @@ export function renderTemplate(type: ResponseType, ctx: TemplateContext): Render
         body: `Hi ${name},\n\n\n\nBest regards,\n${from}`,
       };
   }
+}
+
+export interface OfferLetterContext {
+  candidateName: string | null;
+  roleTitle: string;
+  companyName: string | null;
+  /** Pre-formatted salary line (e.g. "HK$42,000 / month"), or null to omit. */
+  salaryLine: string | null;
+  /** Human date for the letter header, e.g. "4 July 2026". */
+  dateLine: string;
+}
+
+/**
+ * A plain, editable offer-letter DRAFT — rendered client-side for copy/download
+ * after a hire. Deliberately templated with bracketed placeholders the employer
+ * fills in; it's a convenience scaffold, never an auto-sent or binding document.
+ */
+export function renderOfferLetter(ctx: OfferLetterContext): string {
+  const name = ctx.candidateName?.trim() || "[Candidate name]";
+  const company = ctx.companyName?.trim() || "[Company name]";
+  const salaryLine = ctx.salaryLine
+    ? `Your agreed compensation is ${ctx.salaryLine}.`
+    : "Your compensation is [amount] per [period].";
+
+  return [
+    company,
+    ctx.dateLine,
+    "",
+    `Dear ${name},`,
+    "",
+    `We are delighted to offer you the position of ${ctx.roleTitle} at ${company}.`,
+    "",
+    salaryLine,
+    "Your anticipated start date is [start date].",
+    "",
+    "[Add any further terms here — probation period, working hours, benefits, and any conditions of employment.]",
+    "",
+    "We're excited to have you join the team. To accept, please reply to this letter or sign and return a copy.",
+    "",
+    "Warm regards,",
+    company,
+  ].join("\n");
 }

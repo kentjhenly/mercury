@@ -41,6 +41,10 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false,
+    // Make the password bounds explicit rather than relying on defaults. The
+    // upper bound caps the bcrypt/hash work an attacker can force per request.
+    minPasswordLength: 8,
+    maxPasswordLength: 128,
   },
   // Throttle auth endpoints to blunt credential brute-forcing and signup abuse.
   rateLimit: {

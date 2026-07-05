@@ -82,8 +82,42 @@ everyone else to the landing. Do not edit `public/landing/**` — it's vendored.
 - Strict CSP/security headers on the app; a scoped, looser CSP only on
   `/landing/*` (it boots its own React/Babel UMD from unpkg).
 
+## Analytics funnel (validation gates)
+
+Every step emits a PostHog event keyed on the employer's `owner_id` — server-side
+via `captureServerEvent`, client-side via `track` after `identify(owner_id)` — so
+the whole funnel lines up on one distinct id. Event names live in
+[`src/lib/analytics/events.ts`](src/lib/analytics/events.ts).
+
+| Step | Event | Fired when |
+| ---- | ----- | ---------- |
+| Sign up | `mercury_signed_up` | account created |
+| **A1 · Create role** | `mercury_created_role` | a role is created |
+| First ingest | `mercury_first_ingest` | the first applicant lands (email or CSV) |
+| Move a stage | `mercury_moved_stage` | a card changes stage |
+| Send a response | `mercury_sent_response` | a templated reply is sent |
+| **A2 · Second role** | `mercury_second_role_created` | the owner opens role #2 |
+| Hire | `mercury_hire_recorded` | a card moves to `hired` (no amount in payload) |
+| Salary feedback | `mercury_salary_feedback_given` | "does this look right?" answered |
+| **A3 · Return** | `mercury_returned_session` | owner opens a board; carries `days_since_signup` |
+
+Reading the gates straight from PostHog:
+
+- **A1 — does anyone start?** `mercury_created_role`, unique users.
+- **A2 — is it working for them?** `mercury_second_role_created`, unique users
+  (an owner who opens a second role is getting value); supported by hires and
+  responses per owner.
+- **A3 — do they come back?** `mercury_returned_session` filtered to
+  `days_since_signup >= 7`.
+
+Two supporting signals: `mercury_pay_prompt_answered` (would-you-pay) and the
+daily `mercury_response_rate_snapshot` — per-owner response rate + median
+time-to-first-reply, written by the `response-stats` cron.
+
 ## Scope discipline
 
-This is the MVP cut only (spec §11). No notes, AI summaries, team seats, salary,
-candidate accounts, or subscription tiers — those are V2, to be built only after
-a real employer validates the MVP on a live role.
+This is the MVP cut. Bundled **HK salary context** (free, local, never a score)
+and per-employer **response-rate measurement** are in — they're the
+Hong-Kong-first differentiators. Still out: notes, AI summaries, team seats,
+candidate accounts, and any paid tier — those come only after a real employer
+validates the MVP on a live role.

@@ -4,18 +4,20 @@ import "./globals.css";
 import { PostHogProvider } from "@/components/providers/PostHogProvider";
 
 // Match the landing's typography: Space Grotesk (display) + JetBrains Mono (data).
+// Only the weights actually used in the app are requested — 700 is never applied
+// (no `font-bold` / weight-700 anywhere), so we skip two webfont downloads.
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
   subsets: ["latin"],
   display: "swap",
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "500", "600"],
 });
 
 const jetBrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains",
   subsets: ["latin"],
   display: "swap",
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "500", "600"],
 });
 
 export const metadata: Metadata = {

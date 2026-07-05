@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireOwnerId, HttpError } from "@/lib/mercury/owner";
-import { parseBody, errorResponse } from "@/lib/utils/api";
+import { parseBody, errorResponse, assertSameOrigin } from "@/lib/utils/api";
 import { sendResponseSchema } from "@/lib/utils/schemas";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import { getApplicant, getEmployer } from "@/lib/mercury/data";
@@ -15,6 +15,7 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request, { params }: { params: Promise<{ applicantId: string }> }) {
   try {
+    assertSameOrigin(request);
     const ownerId = await requireOwnerId();
     const { applicantId } = await params;
     const parsed = await parseBody(request, sendResponseSchema);

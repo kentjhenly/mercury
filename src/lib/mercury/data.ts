@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import type {
   MercuryApplicant,
@@ -14,11 +15,14 @@ import { STAGES, isStage } from "@/lib/mercury/stages";
 // guardrail. Never read Mercury data outside these helpers without an owner
 // filter.
 
-export async function getEmployer(ownerId: string): Promise<MercuryEmployer | null> {
+// Deduped per request via React.cache(): the mercury layout (for the header) and
+// the board page both read the employer in one navigation — this collapses that
+// into a single round-trip.
+export const getEmployer = cache(async (ownerId: string): Promise<MercuryEmployer | null> => {
   const sb = getSupabaseServiceClient();
   const { data } = await sb.from("mercury_employers").select("*").eq("id", ownerId).maybeSingle();
   return data ?? null;
-}
+});
 
 export interface RoleWithCounts extends MercuryRole {
   applicant_count: number;

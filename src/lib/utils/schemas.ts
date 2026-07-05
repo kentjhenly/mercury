@@ -25,10 +25,12 @@ export const updateApplicantSchema = z.object({
   stage: z.enum(STAGES as [string, ...string[]]).optional(),
   response_owed: z.boolean().optional(),
   needs_review: z.boolean().optional(),
+  // Optional agreed monthly salary recorded on hire (private HK data point).
+  hired_salary_hkd: z.number().int().min(0).max(1_000_000).nullable().optional(),
 });
 
 export const sendResponseSchema = z.object({
-  type: z.enum(["invite-to-interview", "request-info", "polite-decline", "custom"]),
+  type: z.enum(["invite-to-interview", "request-info", "keep-warm", "polite-decline", "custom"]),
   subject: z.string().trim().min(1, "Subject is required").max(200),
   body: z.string().trim().min(1, "Message is required").max(10000),
   advance_stage: z.boolean().optional().default(true),
@@ -40,6 +42,19 @@ export const payFeedbackSchema = z.object({
   amount_hkd: z.number().int().min(0).max(1_000_000).nullable().optional(),
   comment: z.string().trim().max(2000).nullable().optional(),
 });
+
+// A "does this market band look right?" correction on a shown salary estimate.
+// Data collection + engagement, not a support ticket — no free text, no workflow.
+export const SALARY_VERDICTS = ["looks_right", "too_low", "too_high"] as const;
+
+export const salaryFeedbackSchema = z.object({
+  role_id: z.string().uuid(),
+  family: z.string().trim().min(1).max(60),
+  years_used: z.number().int().min(0).max(60),
+  verdict: z.enum(SALARY_VERDICTS),
+  suggested_monthly_hkd: z.number().int().min(0).max(1_000_000).nullable().optional(),
+});
+export type SalaryFeedbackInput = z.infer<typeof salaryFeedbackSchema>;
 
 // CSV backlog import commit. Mapping is column-name-per-field (validated loosely;
 // only known fields are read downstream via coerceMapping). Rows are pre-parsed

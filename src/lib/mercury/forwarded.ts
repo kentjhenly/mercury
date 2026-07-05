@@ -81,14 +81,28 @@ export interface ForwardVerification {
   confirmUrl: string | null;
 }
 
+// A genuine Gmail forwarding confirmation ALWAYS originates from this exact
+// automated address. The subject phrasing alone is not enough — a real candidate
+// could write "forwarding my application for confirmation" — so we key off the
+// sender, never the subject, to avoid swallowing a person as a setup email.
 const GOOGLE_SENDER = /forwarding-noreply@google\.com/i;
-const GOOGLE_SUBJECT = /(gmail )?forwarding confirmation/i;
-const MS_SENDER = /(microsoft|outlook|office365|postmaster)/i;
+// A real Microsoft/Outlook forwarding confirmation likewise comes from an
+// automated system address (no-reply / postmaster / *-noreply), never a human.
+// Requiring that shape stops a real applicant at an outlook.com / office365
+// address from being mistaken for a verification email and silently dropped.
+const MS_SENDER =
+  /(?:no-?reply|do-?not-?reply|postmaster|noreply)@[^\s>]*(?:microsoft|outlook|office365|onmicrosoft)/i;
 const MS_SUBJECT = /forwarding/i;
 
 /**
  * Detect a mail-forwarding confirmation request (Gmail/Outlook send these to the
  * destination address during auto-forward setup) and pull out the code + link.
+ *
+ * [CRITICAL] This gate decides whether an inbound message becomes an applicant
+ * card or is diverted as provider setup. Erring toward "it's a person" is the
+ * safe failure: a real forwarding confirmation misfiled as a needs_review card is
+ * recoverable; a real candidate diverted here is a dropped applicant. So we
+ * require BOTH an automated sender AND an extractable code/link before diverting.
  */
 export function detectForwardVerification(mail: InboundLike): ForwardVerification {
   const none: ForwardVerification = { isVerification: false, provider: null, code: null, confirmUrl: null };
@@ -97,17 +111,19 @@ export function detectForwardVerification(mail: InboundLike): ForwardVerificatio
   const body = mail.text ?? stripHtml(mail.html) ?? "";
 
   let provider: "google" | "microsoft" | null = null;
-  if (GOOGLE_SENDER.test(from) || GOOGLE_SUBJECT.test(subject)) provider = "google";
+  if (GOOGLE_SENDER.test(from)) provider = "google";
   else if (MS_SENDER.test(from) && MS_SUBJECT.test(subject) && /confirm|verif/i.test(body)) provider = "microsoft";
 
   if (!provider) return none;
 
-  return {
-    isVerification: true,
-    provider,
-    code: extractCode(subject, body),
-    confirmUrl: extractConfirmUrl(body),
-  };
+  // Only divert when the message actually carries the confirmation payload. A
+  // provider automated mail without a code or link is more likely misdetected
+  // than a genuine setup step — let it fall through to a card, never dropped.
+  const code = extractCode(subject, body);
+  const confirmUrl = extractConfirmUrl(body);
+  if (!code && !confirmUrl) return none;
+
+  return { isVerification: true, provider, code, confirmUrl };
 }
 
 function extractCode(subject: string, body: string): string | null {

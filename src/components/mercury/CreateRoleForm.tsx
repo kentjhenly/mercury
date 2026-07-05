@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -15,7 +15,7 @@ export function CreateRoleForm({ variant = "button" }: { variant?: "button" | "c
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [skillsRaw, setSkillsRaw] = useState("");
-  const [location, setLocation] = useState("");
+  const [workModes, setWorkModes] = useState<string[]>([]);
   const [exp, setExp] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -26,7 +26,7 @@ export function CreateRoleForm({ variant = "button" }: { variant?: "button" | "c
     setTitle("");
     setDescription("");
     setSkillsRaw("");
-    setLocation("");
+    setWorkModes([]);
     setExp("");
     setError(null);
   }, []);
@@ -55,7 +55,7 @@ export function CreateRoleForm({ variant = "button" }: { variant?: "button" | "c
           title,
           description: description || null,
           required_skills,
-          location: location || null,
+          location: workModes.length ? workModes.join(", ") : null,
           experience_target: exp ? Number(exp) : null,
         }),
       });
@@ -74,7 +74,7 @@ export function CreateRoleForm({ variant = "button" }: { variant?: "button" | "c
     variant === "card" ? (
       <button
         onClick={() => setOpen(true)}
-        className="group flex min-h-[208px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border text-dim transition-colors hover:border-border-strong hover:text-muted"
+        className="group flex min-h-[176px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border text-dim transition-colors hover:border-border-strong hover:text-muted"
       >
         <span className="grid size-10 place-items-center rounded-lg border border-border text-2xl font-light leading-none group-hover:border-border-strong">
           +
@@ -121,7 +121,6 @@ export function CreateRoleForm({ variant = "button" }: { variant?: "button" | "c
                 onChange={(e) => setTitle(e.target.value)}
                 required
                 maxLength={120}
-                placeholder="Senior Frontend Engineer"
                 className="input"
                 autoFocus
               />
@@ -132,38 +131,43 @@ export function CreateRoleForm({ variant = "button" }: { variant?: "button" | "c
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
                 maxLength={5000}
-                placeholder="What the role involves. Used for the optional relevance sort aid."
                 className="input resize-y"
               />
             </L>
-            <L label="Required skills" hint="Comma-separated. Synonyms like “JS” are normalized to “JavaScript”.">
+            <L label="Required skills" hint={`Comma-separated. Synonyms like "JS" are normalized to "JavaScript".`}>
               <input
                 value={skillsRaw}
                 onChange={(e) => setSkillsRaw(e.target.value)}
-                placeholder="React, TypeScript, Node.js"
                 className="input"
               />
             </L>
-            <div className="grid grid-cols-2 gap-4">
-              <L label="Location">
-                <input
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  maxLength={120}
-                  placeholder="Hong Kong"
-                  className="input"
-                />
-              </L>
-              <L label="Experience target (yrs)">
-                <input
-                  value={exp}
-                  onChange={(e) => setExp(e.target.value.replace(/[^0-9]/g, ""))}
-                  inputMode="numeric"
-                  placeholder="5"
-                  className="input tnum"
-                />
-              </L>
-            </div>
+            <L label="Work mode">
+              <div className="flex flex-wrap gap-x-5 gap-y-2 py-1">
+                {["Full time", "Part time", "Internship", "Remote", "Hybrid"].map((mode) => (
+                  <label key={mode} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={workModes.includes(mode)}
+                      onChange={(e) =>
+                        setWorkModes((prev) =>
+                          e.target.checked ? [...prev, mode] : prev.filter((m) => m !== mode)
+                        )
+                      }
+                      className="work-mode-check"
+                    />
+                    <span className="text-[13px] text-text-2">{mode}</span>
+                  </label>
+                ))}
+              </div>
+            </L>
+            <L label="Experience target (yrs)">
+              <input
+                value={exp}
+                onChange={(e) => setExp(e.target.value.replace(/[^0-9]/g, ""))}
+                inputMode="numeric"
+                className="input tnum"
+              />
+            </L>
 
             {error && (
               <p role="alert" className="rounded tone-negative px-3 py-2 text-xs">
@@ -187,7 +191,10 @@ export function CreateRoleForm({ variant = "button" }: { variant?: "button" | "c
             <style>{`
               .input { width:100%; border-radius:4px; border:1px solid var(--border); background:var(--bg); padding:8px 12px; font-size:13px; color:var(--text); outline:none; }
               .input:focus { border-color: var(--signal); }
-              .input::placeholder { color: var(--dim); }
+              .work-mode-check { appearance:none; width:14px; height:14px; min-width:14px; border:1px solid var(--border); border-radius:3px; background:var(--bg); cursor:pointer; display:grid; place-items:center; }
+              .work-mode-check:checked { background:var(--signal); border-color:var(--signal); }
+              .work-mode-check:checked::after { content:""; width:8px; height:8px; background:var(--bg-deep); clip-path:polygon(14% 44%,0 65%,50% 100%,100% 16%,80% 0%,43% 62%); }
+              .work-mode-check:focus-visible { outline:2px solid var(--signal); outline-offset:2px; }
             `}</style>
           </form>
         </div>

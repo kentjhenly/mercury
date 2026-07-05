@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireOwnerId, HttpError } from "@/lib/mercury/owner";
-import { parseBody, errorResponse } from "@/lib/utils/api";
+import { parseBody, errorResponse, assertSameOrigin } from "@/lib/utils/api";
 import { updateApplicantSchema } from "@/lib/utils/schemas";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import { getApplicant } from "@/lib/mercury/data";
@@ -9,6 +9,7 @@ import { FUNNEL } from "@/lib/analytics/events";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ applicantId: string }> }) {
   try {
+    assertSameOrigin(request);
     const ownerId = await requireOwnerId();
     const { applicantId } = await params;
     const parsed = await parseBody(request, updateApplicantSchema);
@@ -19,10 +20,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ap
     if (!existing) throw new HttpError(404, "Applicant not found");
 
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    const { stage, response_owed, needs_review } = parsed.data;
+    const { stage, response_owed, needs_review, hired_salary_hkd } = parsed.data;
     if (stage !== undefined) patch.stage = stage;
     if (response_owed !== undefined) patch.response_owed = response_owed;
     if (needs_review !== undefined) patch.needs_review = needs_review;
+    if (hired_salary_hkd !== undefined) patch.hired_salary_hkd = hired_salary_hkd;
 
     const sb = getSupabaseServiceClient();
     const { data, error } = await sb
@@ -40,6 +42,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ap
         from: existing.stage,
         to: stage,
       });
+      // A2-flywheel signal: an actual hire recorded. No amount in the payload —
+      // the agreed salary is captured separately and kept private.
+      if (stage === "hired") {
+        captureServerEvent(FUNNEL.HIRE_RECORDED, ownerId, {
+          applicant_id: applicantId,
+          from: existing.stage,
+        });
+      }
     }
 
     return NextResponse.json({ applicant: data });

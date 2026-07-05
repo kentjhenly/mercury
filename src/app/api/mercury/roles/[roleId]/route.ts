@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireOwnerId, HttpError } from "@/lib/mercury/owner";
-import { parseBody, errorResponse } from "@/lib/utils/api";
+import { parseBody, errorResponse, assertSameOrigin } from "@/lib/utils/api";
 import { updateRoleSchema } from "@/lib/utils/schemas";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import { getRole } from "@/lib/mercury/data";
@@ -9,6 +9,7 @@ import { CV_BUCKET, RAW_BUCKET } from "@/lib/mercury/storage";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ roleId: string }> }) {
   try {
+    assertSameOrigin(request);
     const ownerId = await requireOwnerId();
     const { roleId } = await params;
     const parsed = await parseBody(request, updateRoleSchema);
@@ -49,6 +50,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ ro
 // files first, then the role row (DB cascade removes applicants + responses).
 export async function DELETE(_request: Request, { params }: { params: Promise<{ roleId: string }> }) {
   try {
+    assertSameOrigin(_request);
     const ownerId = await requireOwnerId();
     const { roleId } = await params;
 

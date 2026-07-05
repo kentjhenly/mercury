@@ -15,18 +15,20 @@ export function AppHeader({ companyName }: { companyName: string | null }) {
   }
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border-soft bg-bg-deep/90 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3">
+    <header className="sticky top-0 z-30 border-b border-border-soft bg-bg-deep">
+      <div className="flex items-center justify-between py-3" style={{ padding: "12px clamp(20px,4vw,52px)" }}>
         <div className="flex items-center gap-5">
           {/* Wordmark + live signal dot — the top-bar "instrument on" cue. */}
           <Link href="/mercury" className="flex items-center gap-2.5" aria-label="Mercury home">
-            <span className="signal-dot" aria-hidden />
-            <span className="text-xs font-semibold tracking-[0.42em] text-mercury">MERCURY</span>
+            <span className="font-mono font-medium tracking-[0.42em] text-text" style={{ fontSize: "13px" }}>MERCURY</span>
           </Link>
-          <span className="hidden h-4 w-px bg-border sm:inline-block" aria-hidden />
-          <Link href="/mercury" className="hidden text-xs text-muted hover:text-text sm:inline">
-            Workspace
-          </Link>
+          {/* Plain, honest positioning — no overclaim, just the two facts */}
+          <span
+            className="hidden font-mono text-dim md:inline"
+            style={{ fontSize: "9px", letterSpacing: ".2em" }}
+          >
+            BUILT FOR HONG KONG HIRING · FREE
+          </span>
         </div>
         <div className="flex items-center gap-4">
           {companyName ? (

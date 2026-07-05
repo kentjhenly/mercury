@@ -7,10 +7,8 @@ import { loadPostHog } from "@/lib/analytics/client";
 export function PostHogProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  useEffect(() => {
-    void loadPostHog();
-  }, []);
-
+  // One effect: load PostHog lazily and capture a pageview per path change. (It
+  // already fires on mount because pathname is set on the first render.)
   useEffect(() => {
     if (!process.env.NEXT_PUBLIC_POSTHOG_KEY) return;
     void loadPostHog().then((posthog) =>

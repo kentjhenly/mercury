@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireOwnerId } from "@/lib/mercury/owner";
-import { parseBody, errorResponse } from "@/lib/utils/api";
+import { parseBody, errorResponse, assertSameOrigin } from "@/lib/utils/api";
 import { payFeedbackSchema } from "@/lib/utils/schemas";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
 import { captureServerEvent } from "@/lib/analytics/server";
@@ -9,6 +9,7 @@ import { FUNNEL } from "@/lib/analytics/events";
 // The validation signal: "would you pay / how much" after real use.
 export async function POST(request: Request) {
   try {
+    assertSameOrigin(request);
     const ownerId = await requireOwnerId();
     const parsed = await parseBody(request, payFeedbackSchema);
     if (!parsed.ok) return parsed.response;

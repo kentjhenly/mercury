@@ -35,6 +35,7 @@ export interface NormalizedInbound {
 }
 
 const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024; // 15 MB per file — bound abuse.
+const MAX_ATTACHMENTS = 10; // A real application carries a CV (+ maybe a cover letter), not dozens.
 const ALLOWED_CV_EXT = /\.(pdf|docx?|txt|rtf)$/i;
 const ALLOWED_CV_TYPE = /(pdf|wordprocessingml|msword|text\/plain|rtf)/i;
 
@@ -46,9 +47,12 @@ export async function normalizeInbound(request: Request): Promise<NormalizedInbo
     const rawAttachments = Array.isArray(body.attachments) ? body.attachments : [];
     const attachments: NormalizedAttachment[] = [];
     for (const a of rawAttachments) {
+      if (attachments.length >= MAX_ATTACHMENTS) break;
       if (!a || typeof a !== "object") continue;
       const { filename, contentType: ct, contentBase64 } = a as Record<string, unknown>;
       if (typeof contentBase64 !== "string" || typeof filename !== "string") continue;
+      // Bound work before decoding: base64 is ~4/3 of the decoded size.
+      if (contentBase64.length > MAX_ATTACHMENT_BYTES * 1.4) continue;
       const data = Buffer.from(contentBase64, "base64");
       if (data.length === 0 || data.length > MAX_ATTACHMENT_BYTES) continue;
       attachments.push({ filename, contentType: typeof ct === "string" ? ct : null, data });
@@ -68,6 +72,7 @@ export async function normalizeInbound(request: Request): Promise<NormalizedInbo
     const form = await request.formData();
     const attachments: NormalizedAttachment[] = [];
     for (const [, value] of form.entries()) {
+      if (attachments.length >= MAX_ATTACHMENTS) break;
       if (value instanceof File && value.size > 0 && value.size <= MAX_ATTACHMENT_BYTES) {
         const data = Buffer.from(await value.arrayBuffer());
         attachments.push({ filename: value.name || "attachment", contentType: value.type || null, data });

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireOwnerId, HttpError } from "@/lib/mercury/owner";
-import { parseBody, errorResponse } from "@/lib/utils/api";
+import { parseBody, errorResponse, assertSameOrigin } from "@/lib/utils/api";
 import { importCsvSchema } from "@/lib/utils/schemas";
 import { getRole } from "@/lib/mercury/data";
 import { getSupabaseServiceClient } from "@/lib/supabase/server";
@@ -21,10 +21,13 @@ const CHUNK = 200;
 // double-create a card. Bulk-upserts in chunks for a fast one-time seed.
 export async function POST(request: Request, { params }: { params: Promise<{ roleId: string }> }) {
   try {
+    assertSameOrigin(request);
     const ownerId = await requireOwnerId();
     const { roleId } = await params;
 
-    const parsed = await parseBody(request, importCsvSchema);
+    // Rows from the preview step are echoed back here; allow a larger body than
+    // the 1 MB default (still bounded — preview caps the file at 2 MB / 2000 rows).
+    const parsed = await parseBody(request, importCsvSchema, 16_000_000);
     if (!parsed.ok) return parsed.response;
 
     const role = await getRole(ownerId, roleId);

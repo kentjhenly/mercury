@@ -66,9 +66,14 @@ const TITLE_KEYWORDS = [
   "accountant", "recruiter", "founder", "owner",
 ];
 
+// A CV's useful facts are near the top; extracted text from a large PDF/DOCX can
+// be megabytes. Cap what the heuristics scan so an oversized (or adversarial)
+// attachment can't turn parsing into a CPU-exhaustion lever on the inbound path.
+const MAX_PARSE_CHARS = 200_000;
+
 /** Pull factual fields out of extracted CV text. Missing fields stay null. */
 export function parseCvText(text: string, requiredSkills: string[] = []): ParsedFields {
-  const clean = (text ?? "").replace(/\r/g, "");
+  const clean = (text ?? "").slice(0, MAX_PARSE_CHARS).replace(/\r/g, "");
   return {
     years_exp: extractYears(clean),
     skills: detectSkills(clean, requiredSkills),
@@ -114,9 +119,15 @@ function extractCurrentRole(text: string): string | null {
   return null;
 }
 
+// Precompiled once at module load — extractLocation runs on every ingest, so
+// there's no reason to rebuild these regexes per call.
+const LOCATION_MATCHERS = LOCATIONS.map((loc) => ({
+  loc,
+  re: new RegExp(`(^|[^a-z])${loc.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z]|$)`, "i"),
+}));
+
 function extractLocation(text: string): string | null {
-  for (const loc of LOCATIONS) {
-    const re = new RegExp(`(^|[^a-z])${loc.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z]|$)`, "i");
+  for (const { loc, re } of LOCATION_MATCHERS) {
     if (re.test(text)) return loc;
   }
   return null;

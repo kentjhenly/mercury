@@ -1,84 +1,89 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import type { MercuryApplicant, MercuryRole, MercuryStage } from "@/lib/supabase/types";
-import { STAGES, STAGE_LABEL, STAGE_TONE } from "@/lib/mercury/stages";
-import { canonicalizeSkill } from "@/lib/mercury/skills";
-import { computeRelevance } from "@/lib/mercury/relevance";
+import type { ResponseType } from "@/lib/mercury/templates";
+import { STAGES, STAGE_LABEL, STAGE_COLOR } from "@/lib/mercury/stages";
+import { getMetro } from "@/lib/mercury/metro";
 import { track } from "@/lib/analytics/client";
 import { FUNNEL } from "@/lib/analytics/events";
-import { StatusStrip } from "./StatusStrip";
 import { ApplicantCard } from "./ApplicantCard";
-import { ResponseModal } from "./ResponseModal";
 import { PayPrompt } from "./PayPrompt";
 
-type SortMode = "newest" | "experience" | "relevance";
+// The detail panel, response composer, and CSV importer only render on user
+// action, so their JS (and the templates / CSV parser they pull) is split out of
+// the board's initial hydration bundle and fetched lazily on first open.
+const ApplicantPanel = dynamic(() => import("./ApplicantPanel").then((m) => m.ApplicantPanel));
+const ResponseModal = dynamic(() => import("./ResponseModal").then((m) => m.ResponseModal));
+const CsvImportModal = dynamic(() => import("./CsvImportModal").then((m) => m.CsvImportModal));
+const HireModal = dynamic(() => import("./HireModal").then((m) => m.HireModal));
+
+type SortMode = "newest" | "experience" | "name";
 
 interface Props {
   role: MercuryRole;
   companyName: string | null;
   initialApplicants: MercuryApplicant[];
+  /** Days since the employer signed up — for the return_session (A3) signal. */
+  daysSinceSignup: number | null;
 }
 
-export function Board({ role, companyName, initialApplicants }: Props) {
+export function Board({ role, companyName, initialApplicants, daysSinceSignup }: Props) {
+  const router = useRouter();
   const [applicants, setApplicants] = useState(initialApplicants);
   const [q, setQ] = useState("");
-  const [skill, setSkill] = useState("");
-  const [minYears, setMinYears] = useState("");
-  const [location, setLocation] = useState("");
   const [sort, setSort] = useState<SortMode>("newest");
+  const [selectedApplicantId, setSelectedApplicantId] = useState<string | null>(null);
   const [responding, setResponding] = useState<MercuryApplicant | null>(null);
+  const [respondType, setRespondType] = useState<ResponseType | undefined>(undefined);
   const [dragId, setDragId] = useState<string | null>(null);
+  const [showImport, setShowImport] = useState(false);
+  const [hireModalFor, setHireModalFor] = useState<MercuryApplicant | null>(null);
 
-  // Returning-session signal for the funnel (one per board mount).
+  const metro = getMetro(role.metro_id);
+
+  // Open the response composer, optionally on a template preselected by a card.
+  function openResponder(applicant: MercuryApplicant, type?: ResponseType) {
+    setRespondType(type);
+    setResponding(applicant);
+  }
+
+  // Derive the selected applicant from live state so panel reflects stage/flag changes.
+  const selectedApplicant = useMemo(
+    () => (selectedApplicantId ? applicants.find((a) => a.id === selectedApplicantId) ?? null : null),
+    [selectedApplicantId, applicants],
+  );
+
   useEffect(() => {
-    track(FUNNEL.RETURNED_SESSION, { role_id: role.id });
-  }, [role.id]);
+    track(FUNNEL.RETURNED_SESSION, { role_id: role.id, days_since_signup: daysSinceSignup });
+  }, [role.id, daysSinceSignup]);
 
-  // Skill options = role's required skills ∪ all detected skills.
-  const skillOptions = useMemo(() => {
-    const set = new Set<string>(role.required_skills.map(canonicalizeSkill));
-    for (const a of applicants) for (const s of a.parsed_skills) set.add(canonicalizeSkill(s));
-    return [...set].sort((x, y) => x.localeCompare(y));
-  }, [applicants, role.required_skills]);
-
-  // True counts (status strip reflects everyone, regardless of active filters).
-  const counts = useMemo(() => {
-    const c = Object.fromEntries(STAGES.map((s) => [s, 0])) as Record<MercuryStage, number>;
-    for (const a of applicants) c[a.stage] += 1;
-    return c;
-  }, [applicants]);
-  const owed = useMemo(() => applicants.filter((a) => a.response_owed).length, [applicants]);
-
-  // Filter (human-set, transparent) — never hides via a hidden score.
+  // Unified filter: searches name, email, current role, skills, and location.
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const min = minYears ? Number(minYears) : null;
-    const loc = location.trim().toLowerCase();
-    const sk = skill ? canonicalizeSkill(skill).toLowerCase() : "";
+    if (!needle) return applicants;
     return applicants.filter((a) => {
-      if (needle) {
-        const hay = `${a.name ?? ""} ${a.email ?? ""} ${a.parsed_current_role ?? ""}`.toLowerCase();
-        if (!hay.includes(needle)) return false;
-      }
-      if (sk && !a.parsed_skills.some((s) => canonicalizeSkill(s).toLowerCase() === sk)) return false;
-      if (min != null && (a.parsed_years_exp == null || a.parsed_years_exp < min)) return false;
-      if (loc && !(a.parsed_location ?? "").toLowerCase().includes(loc)) return false;
-      return true;
+      const hay = [a.name, a.email, a.parsed_current_role, ...a.parsed_skills, a.parsed_location]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(needle);
     });
-  }, [applicants, q, skill, minYears, location]);
+  }, [applicants, q]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
     if (sort === "experience") {
       arr.sort((a, b) => (b.parsed_years_exp ?? -1) - (a.parsed_years_exp ?? -1));
-    } else if (sort === "relevance") {
-      arr.sort((a, b) => computeRelevance(b, role).score - computeRelevance(a, role).score);
+    } else if (sort === "name") {
+      arr.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
     } else {
       arr.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
     }
     return arr;
-  }, [filtered, sort, role]);
+  }, [filtered, sort]);
 
   const byStage = useMemo(() => {
     const m = Object.fromEntries(STAGES.map((s) => [s, [] as MercuryApplicant[]])) as Record<
@@ -100,6 +105,9 @@ export function Board({ role, companyName, initialApplicants }: Props) {
         body: JSON.stringify({ stage }),
       });
       if (!res.ok) throw new Error();
+      // Moving to "hired" opens the lightweight capture: optional agreed salary
+      // + offer-letter draft. (prev.stage != "hired" is guaranteed here.)
+      if (stage === "hired") setHireModalFor({ ...prev, stage });
     } catch {
       setApplicants((cur) => cur.map((a) => (a.id === id ? { ...a, stage: prev.stage } : a)));
       alert("Could not move card. Please try again.");
@@ -111,93 +119,123 @@ export function Board({ role, companyName, initialApplicants }: Props) {
     setResponding(null);
   }
 
-  const filtersActive = q || skill || minYears || location;
-  const shownCount = sorted.length;
-
   return (
     <>
-      <StatusStrip
-        roleTitle={role.title}
-        roleStatus={role.status}
-        counts={counts}
-        owed={owed}
-        total={applicants.length}
-      />
-
-      <div className="mx-auto max-w-[1600px] px-5 py-4">
+      <div className="mx-auto max-w-[1600px] px-5 pt-5 pb-6">
         <PayPrompt applicantCount={applicants.length} />
 
-        {/* Filters — every filter is human-set and visible */}
-        <div className="panel mb-4 flex flex-wrap items-center gap-2 p-3" style={{ boxShadow: "none" }}>
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search name, email, role…"
-            className="min-w-[12rem] flex-1 rounded border border-border bg-bg px-3 py-1.5 text-sm text-text outline-none focus:border-signal"
-          />
-          <select
-            value={skill}
-            onChange={(e) => setSkill(e.target.value)}
-            className="rounded border border-border bg-bg px-2.5 py-1.5 text-xs text-text-2 outline-none focus:border-signal"
-            aria-label="Filter by skill"
-          >
-            <option value="">Any skill</option>
-            {skillOptions.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-          <input
-            value={minYears}
-            onChange={(e) => setMinYears(e.target.value.replace(/[^0-9]/g, ""))}
-            inputMode="numeric"
-            placeholder="Min yrs"
-            className="tnum w-20 rounded border border-border bg-bg px-2.5 py-1.5 text-xs text-text outline-none focus:border-signal"
-            aria-label="Minimum years of experience"
-          />
-          <input
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            placeholder="Location"
-            className="w-28 rounded border border-border bg-bg px-2.5 py-1.5 text-xs text-text outline-none focus:border-signal"
-            aria-label="Filter by location"
-          />
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as SortMode)}
-            className="rounded border border-border bg-bg px-2.5 py-1.5 text-xs text-text-2 outline-none focus:border-signal"
-            aria-label="Sort"
-          >
-            <option value="newest">Sort: Newest</option>
-            <option value="experience">Sort: Most experience</option>
-            <option value="relevance">Sort: Most relevant to role</option>
-          </select>
-          {filtersActive && (
-            <button
-              onClick={() => {
-                setQ("");
-                setSkill("");
-                setMinYears("");
-                setLocation("");
+        {/* Filter bar — no panel, border-bottom only */}
+        <div
+          className="flex flex-wrap items-center gap-3"
+          style={{
+            marginTop: "20px",
+            paddingBottom: "18px",
+            borderBottom: "1px solid rgba(207,212,219,.08)",
+          }}
+        >
+          {/* Search */}
+          <div className="relative flex min-w-[200px] max-w-[340px] flex-1">
+            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center">
+              <SearchIcon />
+            </span>
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Filter by name, skill, location…"
+              style={{
+                width: "100%",
+                padding: "10px 12px 10px 32px",
+                borderRadius: "8px",
+                border: "1px solid rgba(207,212,219,.12)",
+                background: "rgba(0,0,0,.3)",
+                color: "#e7eaef",
+                fontSize: "13px",
+                outline: "none",
               }}
-              className="text-xs text-signal hover:underline"
+            />
+          </div>
+
+          {/* Sort — connected pill group */}
+          <div className="flex items-center gap-2">
+            <span
+              style={{
+                fontFamily: "var(--font-mono, monospace)",
+                fontSize: "10px",
+                letterSpacing: ".14em",
+                color: "var(--dim)",
+              }}
             >
-              Clear
-            </button>
-          )}
+              SORT
+            </span>
+            <div
+              style={{
+                display: "flex",
+                gap: "1px",
+                background: "rgba(207,212,219,.1)",
+                border: "1px solid rgba(207,212,219,.1)",
+                borderRadius: "7px",
+                overflow: "hidden",
+              }}
+            >
+              {(
+                [
+                  { value: "newest", label: "Recent" },
+                  { value: "experience", label: "Experience" },
+                  { value: "name", label: "Name" },
+                ] as { value: SortMode; label: string }[]
+              ).map(({ value, label }) => (
+                <button
+                  key={value}
+                  onClick={() => setSort(value)}
+                  style={{
+                    padding: "7px 12px",
+                    fontSize: "11px",
+                    background: sort === value ? "rgba(207,212,219,.14)" : "transparent",
+                    color: sort === value ? "#eef1f5" : "#8b929c",
+                    cursor: "pointer",
+                    border: "none",
+                    transition: "background .15s, color .15s",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Import CSV trigger */}
+          <button
+            onClick={() => setShowImport(true)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "7px 12px",
+              borderRadius: "7px",
+              border: "1px solid rgba(207,212,219,.12)",
+              background: "transparent",
+              color: "#8b929c",
+              fontSize: "12px",
+              letterSpacing: ".01em",
+              cursor: "pointer",
+              transition: "border-color .15s, color .15s",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(207,212,219,.28)";
+              (e.currentTarget as HTMLButtonElement).style.color = "#d7dbe1";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(207,212,219,.12)";
+              (e.currentTarget as HTMLButtonElement).style.color = "#8b929c";
+            }}
+          >
+            <CsvIcon />
+            Import CSV
+          </button>
         </div>
 
-        {/* Transparency line for the sort aid + filter effect */}
-        <p className="mb-3 text-[11px] text-dim">
-          {sort === "relevance"
-            ? "Relevance is a sort aid only — required-skill overlap (plus experience-target proximity). It reorders; it never hides anyone."
-            : "Showing every applicant. Filters and sort are yours to set and clear."}
-          {filtersActive && ` · ${shownCount} of ${applicants.length} match your filters.`}
-        </p>
-
         {/* Board columns */}
-        <div className="flex gap-3 overflow-x-auto pb-4 scroll-slim">
+        <div className="flex gap-[14px] overflow-x-auto pb-4 scroll-slim" style={{ marginTop: "18px" }}>
           {STAGES.map((stage) => (
             <section
               key={stage}
@@ -208,16 +246,69 @@ export function Board({ role, companyName, initialApplicants }: Props) {
                 if (id) moveStage(id, stage);
                 setDragId(null);
               }}
-              className="flex w-72 shrink-0 flex-col"
+              className="flex shrink-0 flex-col"
+              style={{
+                width: "270px",
+                border: "1px solid rgba(207,212,219,.08)",
+                borderRadius: "11px",
+                background: "linear-gradient(180deg,rgba(19,22,27,.7),rgba(10,12,16,.7))",
+              }}
               aria-label={`${STAGE_LABEL[stage]} column`}
             >
-              <div className="mb-2 flex items-center justify-between px-1">
-                <span className={`rounded px-1.5 py-0.5 text-[11px] uppercase tracking-wider tone-${STAGE_TONE[stage]}`}>
-                  {STAGE_LABEL[stage]}
+              {/* Column header */}
+              <div
+                style={{
+                  flexShrink: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "13px 14px",
+                  borderBottom: "1px solid rgba(207,212,219,.07)",
+                }}
+              >
+                <div className="flex items-center gap-[9px]">
+                  <span
+                    style={{
+                      width: "7px",
+                      height: "7px",
+                      borderRadius: "2px",
+                      background: STAGE_COLOR[stage],
+                      flexShrink: 0,
+                    }}
+                    aria-hidden
+                  />
+                  <span style={{ fontSize: "13px", fontWeight: 600, color: "#d7dbe1", letterSpacing: ".01em" }}>
+                    {STAGE_LABEL[stage]}
+                  </span>
+                </div>
+                <span
+                  className="tnum"
+                  style={{
+                    fontFamily: "var(--font-mono, monospace)",
+                    fontSize: "12px",
+                    color: "#565c66",
+                    minWidth: "18px",
+                    textAlign: "center",
+                    background: "rgba(0,0,0,.3)",
+                    borderRadius: "5px",
+                    padding: "2px 7px",
+                  }}
+                >
+                  {byStage[stage].length}
                 </span>
-                <span className="tnum text-xs text-dim">{byStage[stage].length}</span>
               </div>
-              <div className="flex min-h-24 flex-1 flex-col gap-2.5 rounded-lg border border-dashed border-border-soft/60 p-2">
+
+              {/* Cards */}
+              <div
+                style={{
+                  flex: 1,
+                  overflowY: "auto",
+                  padding: "10px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px",
+                }}
+              >
                 {byStage[stage].length === 0 ? (
                   <p className="px-1 py-6 text-center text-[11px] text-dim">—</p>
                 ) : (
@@ -227,7 +318,8 @@ export function Board({ role, companyName, initialApplicants }: Props) {
                       applicant={a}
                       role={role}
                       onMoveStage={moveStage}
-                      onRespond={setResponding}
+                      onRespond={openResponder}
+                      onOpen={(applicant) => setSelectedApplicantId(applicant.id)}
                       onDragStart={setDragId}
                     />
                   ))
@@ -238,15 +330,95 @@ export function Board({ role, companyName, initialApplicants }: Props) {
         </div>
       </div>
 
+      {/* Applicant detail panel */}
+      {selectedApplicant && (
+        <ApplicantPanel
+          key={selectedApplicant.id}
+          applicant={selectedApplicant}
+          role={role}
+          companyName={companyName}
+          onClose={() => setSelectedApplicantId(null)}
+          onMoveStage={moveStage}
+          onRespond={openResponder}
+          onUpdate={(updated) =>
+            setApplicants((cur) => cur.map((x) => (x.id === updated.id ? updated : x)))
+          }
+        />
+      )}
+
+      {/* Response modal — triggered from card actions or panel */}
       {responding && (
         <ResponseModal
           applicant={responding}
           roleTitle={role.title}
           companyName={companyName}
+          initialType={respondType}
           onClose={() => setResponding(null)}
           onSent={onSent}
         />
       )}
+
+      {/* CSV import modal */}
+      {showImport && (
+        <CsvImportModal
+          roleId={role.id}
+          onImported={() => router.refresh()}
+          onClose={() => setShowImport(false)}
+        />
+      )}
+
+      {/* Hire capture — optional agreed salary + offer-letter draft */}
+      {hireModalFor && (
+        <HireModal
+          applicant={hireModalFor}
+          roleTitle={role.title}
+          companyName={companyName}
+          metro={metro}
+          onClose={() => setHireModalFor(null)}
+          onSaved={(updated) => {
+            setApplicants((cur) => cur.map((x) => (x.id === updated.id ? updated : x)));
+            setHireModalFor(updated);
+          }}
+        />
+      )}
     </>
+  );
+}
+
+function CsvIcon() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="shrink-0 text-dim"
+    >
+      <circle cx="6" cy="6" r="4.5" />
+      <path d="M9.5 9.5L13 13" />
+    </svg>
   );
 }

@@ -1,34 +1,29 @@
 "use client";
 
-import { useState } from "react";
 import type { MercuryApplicant, MercuryRole, MercuryStage } from "@/lib/supabase/types";
-import { STAGES, STAGE_LABEL } from "@/lib/mercury/stages";
 import { canonicalizeSkill } from "@/lib/mercury/skills";
-import { formatDate, initials } from "@/lib/utils/formatters";
+import { estimateSalary, formatSalaryBand } from "@/lib/mercury/salary";
+import { getMetro } from "@/lib/mercury/metro";
 
 interface Props {
   applicant: MercuryApplicant;
   role: MercuryRole;
   onMoveStage: (id: string, stage: MercuryStage) => void;
   onRespond: (applicant: MercuryApplicant) => void;
+  onOpen: (applicant: MercuryApplicant) => void;
   onDragStart?: (id: string) => void;
 }
 
-export function ApplicantCard({ applicant: a, role, onMoveStage, onRespond, onDragStart }: Props) {
-  const [fileBusy, setFileBusy] = useState<"cv" | "raw" | null>(null);
+export function ApplicantCard({ applicant: a, role, onDragStart, onOpen }: Props) {
   const required = new Set(role.required_skills.map((s) => canonicalizeSkill(s).toLowerCase()));
 
-  async function openFile(kind: "cv" | "raw") {
-    setFileBusy(kind);
-    try {
-      const res = await fetch(`/api/mercury/applicants/${a.id}/files?kind=${kind}`);
-      const json = await res.json();
-      if (res.ok && json.url) window.open(json.url, "_blank", "noopener,noreferrer");
-      else alert(json.error || "Could not open file");
-    } finally {
-      setFileBusy(null);
-    }
-  }
+  const visibleSkills = a.parsed_skills.slice(0, 3);
+  const overflow = a.parsed_skills.length - visibleSkills.length;
+
+  // Market context — an instrument readout about the market, never a score of
+  // the applicant. Omitted (not fabricated) when family/years are unknown.
+  const metro = getMetro(role.metro_id);
+  const salary = estimateSalary(metro, role, a);
 
   return (
     <article
@@ -37,113 +32,134 @@ export function ApplicantCard({ applicant: a, role, onMoveStage, onRespond, onDr
         e.dataTransfer.setData("text/plain", a.id);
         onDragStart?.(a.id);
       }}
-      className="panel rise group flex flex-col gap-2.5 p-3.5"
+      onClick={() => onOpen(a)}
+      className="group cursor-pointer"
+      style={{
+        border: "1px solid rgba(207,212,219,.1)",
+        borderRadius: "9px",
+        background: "linear-gradient(180deg,#171a20,#101318)",
+        padding: "13px",
+        transition: "border-color .2s ease, transform .2s ease",
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLElement).style.borderColor = "rgba(207,212,219,.3)";
+        (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)";
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLElement).style.borderColor = "rgba(207,212,219,.1)";
+        (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
+      }}
     >
-      <div className="flex items-start gap-2.5">
-        <div
-          aria-hidden
-          className="tnum mt-0.5 flex size-8 shrink-0 items-center justify-center rounded bg-surface-3 text-[11px] font-semibold text-text-2"
-        >
-          {initials(a.name, a.email)}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <h3 className="truncate text-sm font-semibold text-text">{a.name || "Unknown applicant"}</h3>
-          </div>
-          {a.email && <p className="truncate text-xs text-muted">{a.email}</p>}
-        </div>
-        <span className="tnum shrink-0 text-[10px] text-dim">{formatDate(a.created_at)}</span>
+      {/* Name + owed dot */}
+      <div className="flex items-start justify-between gap-2">
+        <h3 style={{ fontSize: "14px", fontWeight: 600, color: "#eef1f5", letterSpacing: "-.01em", lineHeight: 1.3 }}>
+          {a.name || "Unknown applicant"}
+        </h3>
+        {a.response_owed && (
+          <span
+            style={{
+              marginTop: "4px",
+              width: "7px",
+              height: "7px",
+              flexShrink: 0,
+              borderRadius: "50%",
+              background: "#b89a63",
+              boxShadow: "0 0 7px rgba(184,154,99,.7)",
+            }}
+            aria-label="Owed a reply"
+          />
+        )}
       </div>
 
-      {/* Flags */}
-      {(a.needs_review || a.response_owed) && (
-        <div className="flex flex-wrap gap-1.5">
-          {a.needs_review && (
-            <span className="rounded tone-waiting px-1.5 py-0.5 text-[10px] uppercase tracking-wider">
-              Needs review
-            </span>
+      {/* Current role */}
+      {a.parsed_current_role && (
+        <p style={{ marginTop: "4px", fontSize: "11.5px", color: "#8b929c", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {a.parsed_current_role}
+        </p>
+      )}
+
+      {/* Experience · location */}
+      {(a.parsed_years_exp != null || a.parsed_location) && (
+        <div
+          className="tnum"
+          style={{
+            marginTop: "9px",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            fontFamily: "var(--font-mono, monospace)",
+            fontSize: "10.5px",
+            color: "#7f8088",
+          }}
+        >
+          {a.parsed_years_exp != null && (
+            <span style={{ color: "#aeb4bd" }}>{a.parsed_years_exp}y</span>
           )}
-          {a.response_owed && (
-            <span className="rounded tone-active px-1.5 py-0.5 text-[10px] uppercase tracking-wider">
-              Reply owed
-            </span>
+          {a.parsed_years_exp != null && a.parsed_location && (
+            <span style={{ color: "#3c424b" }}>·</span>
           )}
+          {a.parsed_location && <span>{a.parsed_location}</span>}
         </div>
       )}
 
-      {/* Parsed facts — visible & factual, never a hidden score */}
-      <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-        <Fact label="Experience" value={a.parsed_years_exp != null ? `${a.parsed_years_exp} yrs` : "—"} />
-        <Fact label="Location" value={a.parsed_location || "—"} />
-        <div className="col-span-2">
-          <Fact label="Current role" value={a.parsed_current_role || "—"} />
+      {/* HK market context — clearly an estimate for role/experience, not a verdict */}
+      {salary && (
+        <div
+          className="tnum"
+          title={salary.shortBasis}
+          style={{
+            marginTop: "8px",
+            display: "flex",
+            alignItems: "baseline",
+            gap: "7px",
+            fontFamily: "var(--font-mono, monospace)",
+            fontSize: "10px",
+            color: "#8b929c",
+          }}
+        >
+          <span style={{ color: "#565c66", letterSpacing: ".1em" }}>MKT EST</span>
+          <span style={{ color: "#aeb4bd" }}>
+            {salary.confidence === "medium" ? "~" : ""}
+            {formatSalaryBand(metro, salary)}
+          </span>
         </div>
-      </dl>
+      )}
 
-      {a.parsed_skills.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {a.parsed_skills.slice(0, 8).map((s) => {
+      {/* Skill tags */}
+      {visibleSkills.length > 0 && (
+        <div style={{ marginTop: "10px", display: "flex", flexWrap: "wrap", gap: "5px" }}>
+          {visibleSkills.map((s) => {
             const isReq = required.has(canonicalizeSkill(s).toLowerCase());
             return (
               <span
                 key={s}
-                className={`rounded px-1.5 py-0.5 text-[10px] ${
-                  isReq ? "tone-active" : "tone-neutral"
-                }`}
-                title={isReq ? "Listed in the role's required skills" : undefined}
+                style={{
+                  fontFamily: "var(--font-mono, monospace)",
+                  fontSize: "10px",
+                  color: isReq ? "var(--signal)" : "#9aa0aa",
+                  background: isReq ? "var(--signal-dim)" : "rgba(207,212,219,.07)",
+                  borderRadius: "4px",
+                  padding: "3px 7px",
+                }}
               >
                 {s}
               </span>
             );
           })}
+          {overflow > 0 && (
+            <span
+              style={{
+                fontFamily: "var(--font-mono, monospace)",
+                fontSize: "10px",
+                color: "#565c66",
+                padding: "3px 4px",
+              }}
+            >
+              +{overflow}
+            </span>
+          )}
         </div>
       )}
-
-      {/* Actions */}
-      <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
-        <button
-          onClick={() => openFile("cv")}
-          disabled={!a.cv_file_path || fileBusy === "cv"}
-          className="text-signal hover:underline disabled:text-dim disabled:no-underline"
-        >
-          {fileBusy === "cv" ? "Opening…" : a.cv_file_path ? "CV" : "No CV"}
-        </button>
-        <button
-          onClick={() => openFile("raw")}
-          disabled={!a.raw_email_path || fileBusy === "raw"}
-          className="text-muted hover:text-text-2 disabled:text-dim"
-        >
-          {fileBusy === "raw" ? "Opening…" : "Email"}
-        </button>
-        <button onClick={() => onRespond(a)} className="text-muted hover:text-text-2">
-          Respond
-        </button>
-      </div>
-
-      {/* Stage move — keyboard accessible (drag is an enhancement) */}
-      <label className="flex items-center gap-2 border-t border-border-soft pt-2.5">
-        <span className="text-[10px] uppercase tracking-wider text-dim">Stage</span>
-        <select
-          value={a.stage}
-          onChange={(e) => onMoveStage(a.id, e.target.value as MercuryStage)}
-          className="flex-1 rounded border border-border bg-bg px-2 py-1 text-xs text-text-2 outline-none focus:border-signal"
-        >
-          {STAGES.map((s) => (
-            <option key={s} value={s}>
-              {STAGE_LABEL[s]}
-            </option>
-          ))}
-        </select>
-      </label>
     </article>
-  );
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-[10px] uppercase tracking-wider text-dim">{label}</dt>
-      <dd className="truncate text-text-2">{value}</dd>
-    </div>
   );
 }

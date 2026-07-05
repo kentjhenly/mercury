@@ -15,6 +15,11 @@ import { FUNNEL } from "@/lib/analytics/events";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Hard ceiling on an inbound POST: one 15 MB attachment base64-inflates to ~20 MB,
+// plus body/headers. Reject anything larger up front so a rogue authorized sender
+// can't force a huge parse at this unauthenticated-facing trust boundary.
+const MAX_INBOUND_BYTES = 30 * 1024 * 1024;
+
 // [CRITICAL] Verify the shared inbound secret before accepting anything. An
 // attacker who can't present it must not be able to POST fake applicants.
 function isAuthorized(request: Request): boolean {
@@ -38,8 +43,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // 1b. Bound the payload size before we read/parse the body.
+  const declaredLength = Number(request.headers.get("content-length") ?? "");
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_INBOUND_BYTES) {
+    return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+  }
+
   // 2. Coarse rate limit (per source IP) to bound abuse / runaway ingestion.
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  //    Prefer the platform-set x-real-ip: the leftmost x-forwarded-for value is
+  //    client-supplied and can be rotated to evade a per-IP limit.
+  const ip =
+    request.headers.get("x-real-ip")?.trim() ||
+    request.headers.get("x-forwarded-for")?.split(",").pop()?.trim() ||
+    "unknown";
   if (!rateLimit(`inbound:${ip}`, 120, 60_000).ok) {
     return NextResponse.json({ error: "Rate limited" }, { status: 429 });
   }

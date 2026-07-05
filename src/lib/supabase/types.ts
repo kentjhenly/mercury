@@ -21,6 +21,10 @@ export interface MercuryRole {
   experience_target: number | null;
   ingest_token: string;
   status: "open" | "closed";
+  // Which market's salary data this role uses. Nullable; reads default to 'hk'
+  // via getMetro(). Only 'hk' exists today — the column makes multi-local a data
+  // change, not a schema change.
+  metro_id: string | null;
   created_at: string;
 }
 
@@ -39,6 +43,9 @@ export interface MercuryApplicant {
   stage: MercuryStage;
   response_owed: boolean;
   needs_review: boolean;
+  // Agreed monthly HKD, optionally recorded by the employer on hire. Private;
+  // a real HK offer data point that sharpens the bundled market estimates.
+  hired_salary_hkd: number | null;
   dedupe_key: string;
   source: "email" | "forward" | "csv";
   created_at: string;
@@ -82,6 +89,32 @@ export interface MercuryPayFeedback {
   created_at: string;
 }
 
+// Daily snapshot of an employer's response reliability. About the employer's
+// professionalism over time, never a candidate.
+export interface MercuryResponseStats {
+  id: string;
+  owner_id: string;
+  snapshot_date: string;
+  engaged: number;
+  responded: number;
+  rate_pct: number | null;
+  median_first_response_hours: number | null;
+  created_at: string;
+}
+
+// A correction on a shown salary band. Not a judgement of a candidate — feedback
+// on the *market data*, used to sharpen the bundled estimates over time.
+export interface MercurySalaryFeedback {
+  id: string;
+  owner_id: string;
+  role_id: string;
+  family: string;
+  years_used: number;
+  verdict: "looks_right" | "too_low" | "too_high";
+  suggested_monthly_hkd: number | null;
+  created_at: string;
+}
+
 // Reads are strongly typed via Row. Insert/Update use a permissive patch type so
 // server code can build dynamic patch objects without fighting enum/string
 // variance — validation is enforced upstream by Zod schemas, not these types.
@@ -103,6 +136,8 @@ export interface Database {
       mercury_applicants: Table<MercuryApplicant>;
       mercury_responses: Table<MercuryResponse>;
       mercury_pay_feedback: Table<MercuryPayFeedback>;
+      mercury_salary_feedback: Table<MercurySalaryFeedback>;
+      mercury_response_stats: Table<MercuryResponseStats>;
       mercury_forward_verifications: Table<MercuryForwardVerification>;
     };
     Views: Record<string, never>;

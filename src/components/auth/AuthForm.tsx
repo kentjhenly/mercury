@@ -28,7 +28,16 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
           name,
           display_name: name,
         } as Parameters<typeof signUp.email>[0]);
-        if (error) throw new Error(error.message || "Could not create account");
+        if (error) {
+          const msg =
+            error.message ||
+            (error as { error?: { message?: string } }).error?.message ||
+            error.statusText ||
+            (error.status ? `HTTP ${error.status}` : null) ||
+            "Could not create account";
+          console.error("[sign-up]", error.status, msg, error);
+          throw new Error(msg);
+        }
         if (data?.user?.id) {
           identify(data.user.id, { email });
           track(FUNNEL.SIGNED_UP, { email });
@@ -95,9 +104,9 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
       <button
         type="submit"
         disabled={loading}
-        className="mercury-btn mt-1 px-4 py-2.5 text-xs tracking-wider disabled:opacity-60"
+        className="mercury-btn mt-1 px-4 py-2.5 text-xs tracking-wider disabled:opacity-60 [&::after]:hidden"
       >
-        {loading ? "WORKING…" : isSignUp ? "CREATE WORKSPACE" : "SIGN IN"}
+        {loading ? "WORKING…" : isSignUp ? "CREATE ACCOUNT" : "SIGN IN"}
       </button>
 
       <p className="text-center text-xs text-dim">

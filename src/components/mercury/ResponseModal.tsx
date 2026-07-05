@@ -13,18 +13,27 @@ interface Props {
   applicant: MercuryApplicant;
   roleTitle: string;
   companyName: string | null;
+  /** Template preselected by the caller (e.g. a panel quick-action card). */
+  initialType?: ResponseType;
   onClose: () => void;
   onSent: (updated: MercuryApplicant) => void;
 }
 
 const TYPES: ResponseType[] = [...RESPONSE_TYPES, "custom"];
 
-export function ResponseModal({ applicant, roleTitle, companyName, onClose, onSent }: Props) {
+export function ResponseModal({
+  applicant,
+  roleTitle,
+  companyName,
+  initialType = "invite-to-interview",
+  onClose,
+  onSent,
+}: Props) {
   const draftFor = (t: ResponseType) =>
     renderTemplate(t, { applicantName: applicant.name, roleTitle, companyName });
 
-  const initial = draftFor("invite-to-interview");
-  const [type, setType] = useState<ResponseType>("invite-to-interview");
+  const initial = draftFor(initialType);
+  const [type, setType] = useState<ResponseType>(initialType);
   const [subject, setSubject] = useState(initial.subject);
   const [body, setBody] = useState(initial.body);
   const [advance, setAdvance] = useState(Boolean(initial.advanceTo));
@@ -34,7 +43,7 @@ export function ResponseModal({ applicant, roleTitle, companyName, onClose, onSe
   // Reset the editable draft when the user picks a different template type.
   // React's documented "adjust state when a value changes" pattern (set during
   // render via a tracked previous value) — not an effect, so no cascading render.
-  const [draftType, setDraftType] = useState<ResponseType>("invite-to-interview");
+  const [draftType, setDraftType] = useState<ResponseType>(initialType);
   if (type !== draftType) {
     const t = draftFor(type);
     setDraftType(type);

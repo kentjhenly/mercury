@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import Papa from "papaparse";
 import { requireOwnerId, HttpError } from "@/lib/mercury/owner";
-import { errorResponse } from "@/lib/utils/api";
+import { errorResponse, assertSameOrigin } from "@/lib/utils/api";
 import { getRole } from "@/lib/mercury/data";
 import { suggestMapping } from "@/lib/mercury/csv";
 import { MAX_IMPORT_ROWS } from "@/lib/utils/schemas";
@@ -17,6 +17,7 @@ const MAX_CSV_BYTES = 2 * 1024 * 1024; // 2 MB — a backlog seeder, not a feed.
 // caller before we read anything.
 export async function POST(request: Request, { params }: { params: Promise<{ roleId: string }> }) {
   try {
+    assertSameOrigin(request);
     const ownerId = await requireOwnerId();
     const { roleId } = await params;
 
