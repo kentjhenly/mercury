@@ -9,14 +9,21 @@ A standalone, lightweight, **human-controlled hiring workspace**. It turns an
 employer's inbox of job applications into a calm, skimmable board:
 
 > forward applicant emails to a per-role address → uniform cards with parsed CV
-> facts + the original CV → sort/filter on visible facts → move through stages →
-> one-click templated responses → a "who's owed a reply" view + a
-> would-you-pay validation prompt.
+> facts + the original CV + HK salary context per role → sort/filter on visible
+> facts → move through stages → one-click templated responses → a "who's owed a
+> reply" view + response-rate measurement + a would-you-pay validation prompt.
+
+It is **Hong Kong-first**: bundled local salary intelligence + genuinely free
+(no paywall on core features) is the durable differentiator vs. generic inbox
+tools. Salary data is local and free — no paid salary/LLM APIs, ever.
 
 **Brand rule (load-bearing, not a nicety):** ML only *organizes* (CV parsing,
 skill-synonym normalization). It never scores, ranks-as-judgement, or hides.
-Every applicant stays visible; every filter is human-set and visible. Do not add
-features that violate this, even if asked casually — flag the conflict first.
+Every applicant stays visible; every filter is human-set and visible. Salary
+figures are **market context** (bundled local data + regression), shown with a
+visible basis and *suppressed* when uncertain — never a score of, or verdict on,
+any applicant. Do not add features that violate this, even if asked casually —
+flag the conflict first.
 
 Mercury is its own product. It is **not** a phase of, or connected to, any other
 project in this account.
@@ -30,7 +37,8 @@ project in this account.
   Auth); Better Auth owns the `user`/`session`/`account`/`verification` tables
   and is the source of truth for identity.
 - **Resend** — outbound templated candidate responses + reminder emails.
-- **PostHog** — funnel analytics (ingest → respond → would-pay).
+- **PostHog** — funnel analytics (A1 create-role → A2 second-role → A3 return,
+  plus ingest/respond/hire/salary-feedback signals). See README for the mapping.
 - **Tailwind v4**, Space Grotesk + JetBrains Mono, `#06070a` canvas, silver
   gradient buttons — tuned to match the vendored landing.
 
@@ -47,7 +55,10 @@ project in this account.
    creates a card. Parse/upload failures set `needs_review = true` — never a
    dropped row. See [inbound/route.ts](src/app/api/mercury/inbound/route.ts).
 4. **ML organizes, never judges.** No auto-scoring, ranking-as-judgement, or
-   hiding. `declined` is a *stage* (always visible), never a delete/hide.
+   hiding. `declined` is a *stage* (always visible), never a delete/hide. Salary
+   estimates are **market information** with a visible basis, suppressed when
+   confidence is low — never a per-candidate score. Response-rate metrics measure
+   the *employer's* professionalism, never a candidate.
 5. **Files are private.** CVs and raw emails live in private Supabase buckets
    (`mercury-cvs`, `mercury-raw-emails`) and are served only via short-lived
    signed URLs from server code.
@@ -60,22 +71,59 @@ project in this account.
 
 `public/landing/**` is a vendored Claude **Design Component**, served verbatim
 (its own `support.js` runtime, `mercury-sphere.js` dot-sphere,
-`statue-dithered.png`). **Never edit or lint it.** Root `/` redirects signed-in
-users → `/mercury`, everyone else → the landing. A scoped, looser CSP applies to
-`/landing/*` only (it loads React/Babel UMD from unpkg + Google Fonts).
+`statue-dithered.png`). **Never edit or lint it**, with one standing exception:
+the owner has authorized *copy-only* edits to the marketing text in
+`index.html` (the HK/free/salary positioning) — still make no structural,
+style, or runtime changes there. Root `/` redirects signed-in users → `/mercury`,
+everyone else → the landing. A scoped, looser CSP applies to `/landing/*` only
+(it loads React/Babel UMD from unpkg + Google Fonts).
 
-## Data model (see [0001_mercury_init.sql](supabase/migrations/0001_mercury_init.sql))
+## Data model (migrations `0001`–`0007` in [supabase/migrations/](supabase/migrations/))
 
 - `mercury_employers` — one workspace per user (company name, reply-to).
 - `mercury_roles` — a job; carries an unguessable `ingest_token` that forms the
-  forwarding address. `status`: `open` | `closed`.
+  forwarding address. `status`: `open` | `closed`. `metro_id` (nullable, → `'hk'`)
+  selects the salary market.
 - `mercury_applicants` — one card. Parsed facts (`parsed_years_exp`,
   `parsed_skills`, `parsed_current_role`, `parsed_location`), `stage`,
-  `response_owed`, `needs_review`, `dedupe_key`.
+  `response_owed`, `needs_review`, `dedupe_key`. `hired_salary_hkd` (nullable) is
+  the optional agreed salary captured on hire.
 - `mercury_stage` enum (board order):
   `new → reviewing → shortlisted → contacted → interviewing → hired → declined`.
 - `mercury_responses` — sent templated replies (snapshot of subject/body).
 - `mercury_pay_feedback` — the would-you-pay validation signal.
+- `mercury_salary_feedback` — corrections on a shown market band (verdict +
+  optional expected figure); sharpens the bundled data, never a candidate verdict.
+- `mercury_response_stats` — daily per-employer response-rate snapshots.
+
+New tables follow the `0003` RLS-lockdown pattern: `enable row level security`
+with no policies + `revoke all … from anon, authenticated` (service-role
+bypasses; app code is always owner-scoped).
+
+## Salary intelligence (metro layer)
+
+- [src/lib/mercury/metro/](src/lib/mercury/metro/) holds market config as data:
+  `types.ts` (`MetroConfig`/`RoleFamilyData`), `hk.ts` (the **only** market built —
+  currency, period, labels, reference points, title aliases), `index.ts`
+  (`getMetro(id)` + matching). Multi-local is a *data* change, not a code change.
+- [src/lib/mercury/salary/](src/lib/mercury/salary/) takes a `MetroConfig`
+  param; the regression (log-linear Mincer + shrinkage + monotone clamp) is
+  market-agnostic. `getMetro(role.metro_id)` is the single resolve point; keep
+  currency/`HK` literals out of the salary logic (only in `metro/hk.ts` + the
+  `format*` helpers).
+- `estimateSalary` returns `confidence: high | medium` (medium widens the band);
+  **low confidence and unknown family return `null`** → the UI shows
+  "unavailable", never a fabricated number. It's covered by `salary.test.ts`
+  (`npm run test`) — keep it green.
+
+## Analytics & cron
+
+- Funnel events live in [src/lib/analytics/events.ts](src/lib/analytics/events.ts)
+  and fire on `owner_id` (server: `captureServerEvent`; client: `track` after
+  `identify(owner_id)`). The A1/A2/A3 gate mapping is documented in the README.
+- Two Vercel crons, both `CRON_SECRET`-guarded (constant-time compare):
+  `response-reminders` (owed-reply nudge) and `response-stats` (writes the daily
+  `mercury_response_stats` snapshot). Registered in `vercel.json`.
 
 ## Commands
 
@@ -83,8 +131,11 @@ users → `/mercury`, everyone else → the landing. A scoped, looser CSP applie
 npm run dev       # next dev
 npm run build     # next build — keep this clean
 npm run lint      # eslint — keep this clean
+npm run test      # vitest (salary regression/confidence suite)
 npm run migrate supabase/migrations/0001_mercury_init.sql   # apply a migration (needs DATABASE_URL)
 ```
+
+Migrations `0001`–`0007` apply in order; each is idempotent (`if not exists`).
 
 ## Running locally (not yet runnable out of the box)
 
@@ -96,7 +147,7 @@ email worker POSTing normalized mail to `/api/mercury/inbound`. Required env:
 - `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`
 - `INBOUND_SECRET`, `MERCURY_INBOUND_DOMAIN`
 - `RESEND_API_KEY`, `RESEND_FROM_EMAIL`
-- `CRON_SECRET` (protects `/api/cron/response-reminders`)
+- `CRON_SECRET` (protects `/api/cron/response-reminders` + `/api/cron/response-stats`)
 - `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST` (optional analytics)
 
 ## Conventions
