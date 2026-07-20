@@ -15,8 +15,9 @@
 //     ]
 //   }
 //
-// A multipart/form-data POST (e.g. an inbound-parse provider) is also accepted:
-// text fields map by name, and any File parts become attachments.
+// ponytail: JSON-only. The bundled Cloudflare worker is the only producer; add a
+// multipart/form-data branch here if a provider that posts inbound-parse forms
+// (SendGrid, Mailgun) is ever wired up.
 
 export interface NormalizedAttachment {
   filename: string;
@@ -64,27 +65,6 @@ export async function normalizeInbound(request: Request): Promise<NormalizedInbo
       text: str(body.text),
       html: str(body.html),
       messageId: str(body.messageId) ?? str(body["message-id"]),
-      attachments,
-    };
-  }
-
-  if (contentType.includes("multipart/form-data") || contentType.includes("x-www-form-urlencoded")) {
-    const form = await request.formData();
-    const attachments: NormalizedAttachment[] = [];
-    for (const [, value] of form.entries()) {
-      if (attachments.length >= MAX_ATTACHMENTS) break;
-      if (value instanceof File && value.size > 0 && value.size <= MAX_ATTACHMENT_BYTES) {
-        const data = Buffer.from(await value.arrayBuffer());
-        attachments.push({ filename: value.name || "attachment", contentType: value.type || null, data });
-      }
-    }
-    return {
-      to: str(form.get("to")),
-      from: str(form.get("from")),
-      subject: str(form.get("subject")),
-      text: str(form.get("text")),
-      html: str(form.get("html")),
-      messageId: str(form.get("messageId")) ?? str(form.get("Message-Id")),
       attachments,
     };
   }

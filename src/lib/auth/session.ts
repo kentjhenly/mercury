@@ -21,11 +21,3 @@ export const getServerSession = cache(async () => {
     }
   }
 });
-
-export async function requireSession() {
-  const session = await getServerSession();
-  if (!session) {
-    throw new Error("Unauthorized");
-  }
-  return session;
-}

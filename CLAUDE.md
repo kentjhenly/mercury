@@ -142,8 +142,8 @@ Migrations `0001`–`0007` apply in order; each is idempotent (`if not exists`).
 Needs a Supabase project, a `.env.local`, the migration applied, and an inbound
 email worker POSTing normalized mail to `/api/mercury/inbound`. Required env:
 
-- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-  `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL` (pooled connection string)
+- `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
+  `DATABASE_URL` (pooled connection string)
 - `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`
 - `INBOUND_SECRET`, `MERCURY_INBOUND_DOMAIN`
 - `RESEND_API_KEY`, `RESEND_FROM_EMAIL`

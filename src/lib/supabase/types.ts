@@ -114,36 +114,3 @@ export interface MercurySalaryFeedback {
   suggested_monthly_hkd: number | null;
   created_at: string;
 }
-
-// Reads are strongly typed via Row. Insert/Update use a permissive patch type so
-// server code can build dynamic patch objects without fighting enum/string
-// variance — validation is enforced upstream by Zod schemas, not these types.
-// `Relationships: []` is required by Supabase's GenericTable shape; omitting it
-// degrades the whole schema's inference to `never`.
-type Patch = Record<string, unknown>;
-type Table<Row> = {
-  Row: Row;
-  Insert: Patch;
-  Update: Patch;
-  Relationships: [];
-};
-
-export interface Database {
-  public: {
-    Tables: {
-      mercury_employers: Table<MercuryEmployer>;
-      mercury_roles: Table<MercuryRole>;
-      mercury_applicants: Table<MercuryApplicant>;
-      mercury_responses: Table<MercuryResponse>;
-      mercury_pay_feedback: Table<MercuryPayFeedback>;
-      mercury_salary_feedback: Table<MercurySalaryFeedback>;
-      mercury_response_stats: Table<MercuryResponseStats>;
-      mercury_forward_verifications: Table<MercuryForwardVerification>;
-    };
-    Views: Record<string, never>;
-    Functions: Record<string, never>;
-    Enums: {
-      mercury_stage: MercuryStage;
-    };
-  };
-}

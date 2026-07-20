@@ -214,6 +214,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, duplicate: true, applicant_id: created.id });
   }
 
+  // Real mail reached this address, so any pending forward confirmation is done —
+  // clear the banner rather than making the employer dismiss it by hand.
+  await sb
+    .from("mercury_forward_verifications")
+    .update({ resolved: true })
+    .eq("role_id", role.id)
+    .eq("resolved", false);
+
   captureServerEvent(FUNNEL.APPLICANT_INGESTED, ownerId, {
     role_id: role.id,
     applicant_id: created.id,

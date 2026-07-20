@@ -3,7 +3,7 @@
 // only ever returns Hong Kong, but every read defaults through here so adding a
 // second metro is a data change, not a code change.
 
-import type { MetroConfig, RoleFamily, RoleFamilyData } from "./types";
+import type { MetroConfig, RoleFamilyData } from "./types";
 import { HK_METRO } from "./hk";
 
 export type { MetroConfig, RoleFamily, RoleFamilyData, SalaryPoint, SalaryPeriod } from "./types";
@@ -64,14 +64,6 @@ export function matchRoleFamilyData(
     if (familyRegex(fam).test(t)) return fam;
   }
   return null;
-}
-
-/** Convenience: the matched family key, or null. */
-export function matchRoleFamily(
-  metro: MetroConfig,
-  title: string | null | undefined
-): RoleFamily | null {
-  return matchRoleFamilyData(metro, title)?.family ?? null;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { HK_METRO } from "../metro/hk";
-import { matchRoleFamily } from "../metro";
+import { matchRoleFamilyData } from "../metro";
 import type { RoleFamily } from "../metro/types";
 import { fitFamilyCurve, predictBand } from "./regression";
 import { estimateSalary } from "./index";
@@ -92,7 +92,7 @@ describe("regression: shrinkage & small samples", () => {
   });
 });
 
-describe("matchRoleFamily", () => {
+describe("matchRoleFamilyData", () => {
   const cases: [string, RoleFamily | null][] = [
     ["Senior Software Engineer", "software_engineer"],
     ["Full-Stack Developer", "software_engineer"],
@@ -113,7 +113,7 @@ describe("matchRoleFamily", () => {
   ];
   for (const [title, family] of cases) {
     it(`"${title}" → ${family ?? "null"}`, () => {
-      expect(matchRoleFamily(HK_METRO, title)).toBe(family);
+      expect(matchRoleFamilyData(HK_METRO, title)?.family ?? null).toBe(family);
     });
   }
 });

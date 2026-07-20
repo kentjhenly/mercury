@@ -42,27 +42,6 @@ export function parseIntInRange(value: unknown, min: number, max: number): numbe
   return i;
 }
 
-/**
- * Normalize a skills array: keep only non-empty strings, trim + length-cap each,
- * de-duplicate case-insensitively, and bound the total count.
- */
-export function sanitizeSkills(raw: unknown, max: number): string[] {
-  if (!Array.isArray(raw)) return [];
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const item of raw) {
-    if (typeof item !== "string") continue;
-    const s = item.trim().slice(0, 60);
-    if (!s) continue;
-    const key = s.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(s);
-    if (out.length >= max) break;
-  }
-  return out;
-}
-
 /** Basic, length-bounded email shape check for stored/echoed addresses. */
 export function isValidEmail(value: unknown): value is string {
   if (typeof value !== "string") return false;

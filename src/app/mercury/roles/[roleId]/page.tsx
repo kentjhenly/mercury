@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireOwnerId } from "@/lib/mercury/owner";
-import { getRole, listApplicants, getEmployer } from "@/lib/mercury/data";
+import { getRole, listApplicants, getEmployer, getPendingForwardVerification } from "@/lib/mercury/data";
 import { forwardingAddress } from "@/lib/mercury/ingest";
 import { estimateSalary, formatSalaryBand, formatSalaryFull } from "@/lib/mercury/salary";
 import { getMetro } from "@/lib/mercury/metro";
@@ -24,10 +24,11 @@ export default async function BoardPage({ params }: { params: Promise<{ roleId: 
   // All three reads are independent — resolve them in one round-trip window
   // rather than fetching the role first and then everything else. listApplicants
   // is owner+role scoped, so a bad roleId just yields [] on the rare notFound.
-  const [role, applicants, employer] = await Promise.all([
+  const [role, applicants, employer, forwardVerification] = await Promise.all([
     getRole(ownerId, roleId),
     listApplicants(ownerId, roleId),
     getEmployer(ownerId),
+    getPendingForwardVerification(ownerId, roleId),
   ]);
   if (!role) notFound();
 
@@ -69,6 +70,36 @@ export default async function BoardPage({ params }: { params: Promise<{ roleId: 
                 {role.location && <span className="text-dim">·</span>}
                 <CopyField value={ingestEmail} label="forwarding address" variant="chip" />
               </div>
+
+              {/* The provider's one-time auto-forward confirmation, caught at ingest
+                  (inbound/route.ts) instead of becoming a phantom applicant. Clears
+                  itself once real mail arrives for this role. */}
+              {forwardVerification && (
+                <div
+                  className="mt-3 rounded-lg border px-3.5 py-2.5 text-sm"
+                  style={{ borderColor: "var(--waiting)", background: "rgba(255,255,255,.02)" }}
+                >
+                  <span className="text-text">
+                    {forwardVerification.provider === "microsoft" ? "Outlook" : "Gmail"} wants you to
+                    confirm forwarding to this address.
+                  </span>{" "}
+                  {forwardVerification.code && (
+                    <span className="tnum font-mono text-muted">
+                      Code <span className="text-text">{forwardVerification.code}</span>.
+                    </span>
+                  )}{" "}
+                  {forwardVerification.confirm_url && (
+                    <a
+                      href={forwardVerification.confirm_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-text"
+                    >
+                      Open confirmation link
+                    </a>
+                  )}
+                </div>
+              )}
 
               {/* HK market band for this role — labelled estimate, with its basis on hover */}
               <div
