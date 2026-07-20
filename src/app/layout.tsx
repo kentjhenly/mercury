@@ -21,7 +21,7 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Mercury — a calm hiring workspace",
+  title: "Mercury",
   description:
     "Turn an inbox of job applications into a clean, skimmable, human-controlled hiring board. Every applicant stays visible. Every filter is yours.",
 };

@@ -98,7 +98,18 @@ export const auth = betterAuth({
       },
     },
   },
-  trustedOrigins: [process.env.BETTER_AUTH_URL ?? "http://localhost:3000"],
+  // [CRITICAL] CSRF: only these origins may call the auth endpoints. Vercel
+  // gives both the production alias (VERCEL_PROJECT_PRODUCTION_URL) and the
+  // per-deployment host (VERCEL_URL); trust both so auth works before
+  // BETTER_AUTH_URL is set, and on preview deployments.
+  trustedOrigins: [
+    process.env.BETTER_AUTH_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL &&
+      `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`,
+    process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`,
+    !process.env.VERCEL_URL && "http://localhost:3000",
+  ].filter((o): o is string => Boolean(o)),
   advanced: {
     crossSubDomainCookies: { enabled: false },
   },

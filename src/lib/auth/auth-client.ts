@@ -2,8 +2,8 @@
 
 import { createAuthClient } from "better-auth/react";
 
-export const authClient = createAuthClient({
-  baseURL: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
-});
+// No baseURL: same-origin. Never hardcode localhost here — a missing
+// NEXT_PUBLIC_* at build time would bake it into the production bundle.
+export const authClient = createAuthClient();
 
 export const { signIn, signOut, signUp, useSession } = authClient;
